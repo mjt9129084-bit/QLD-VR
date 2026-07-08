@@ -1,54 +1,46 @@
 import streamlit as st
 import yfinance as yf
 
-# 1. 앱 제목 및 기본 설정
-st.set_page_config(page_title="QLD 위험도 모니터링", page_icon="📉")
-st.title("📉 QLD 주가 & MDD 대시보드")
-st.write("2025년 1월 1일 이후의 최고가 대비 최대 낙폭(MDD)을 계산합니다.")
+# 1. 앱 제목 설정
+st.set_page_config(page_title="주가 최고점 모니터링", page_icon="📉")
+st.title("📉 주가 최고점 & 하락률 계산기")
 
-# 2. 데이터 불러오기 설정
-ticker_symbol = "QLD"
-start_date = "2025-01-01"
+# 2. 사용자 입력창 만들기 (핵심 기능!)
+st.write("궁금한 주식의 티커를 입력해보세요.")
+ticker_input = st.text_input("미국 주식(예: QLD, AAPL) 또는 한국 주식(예: 005930.KS)", "QLD")
+ticker_symbol = ticker_input.upper() # 소문자로 쳐도 대문자로 자동 변환
 
-# 사용자에게 데이터 로딩 중임을 알려주는 기능
-with st.spinner('미국 주식 데이터를 불러오는 중입니다...'):
+with st.spinner(f'{ticker_symbol} 데이터를 불러오는 중입니다...'):
     ticker_data = yf.Ticker(ticker_symbol)
-    df = ticker_data.history(start=start_date)
+    # 최근 5년간의 데이터를 불러옵니다 (기간은 '1y', 'max' 등으로 변경 가능)
+    df = ticker_data.history(period="5y") 
 
-# 데이터가 정상적으로 불러와졌는지 확인
 if not df.empty:
-    # 3. 핵심 로직 계산
-    # 가장 최근 종가 (현재가)
-    current_price = df['Close'].iloc[-1]
+    # 3. 데이터 계산하기
+    current_price = df['Close'].iloc[-1] # 가장 최근 종가
     
-    # 누적 최고가 계산 (과거부터 현재까지의 가장 높았던 가격 갱신)
-    df['Roll_Max'] = df['Close'].cummax()
+    max_price = df['Close'].max() # 기간 내 최고가
+    # 최고가를 기록한 날짜를 찾아 보기 좋은 형식으로 변경
+    max_date = df['Close'].idxmax().strftime('%Y년 %m월 %d일') 
     
-    # 고점 대비 하락률(Drawdown) 계산: ((현재가 - 최고가) / 최고가) * 100
-    df['Drawdown'] = (df['Close'] / df['Roll_Max'] - 1) * 100
+    # 증감률(하락률) 계산
+    drawdown = ((current_price - max_price) / max_price) * 100
     
-    # 최대 낙폭(MDD) 추출 (가장 많이 떨어진 수치)
-    mdd = df['Drawdown'].min()
+    # 4. 화면에 결과 보여주기
+    st.subheader(f"📊 {ticker_symbol} 핵심 지표 요약")
     
-    # 4. 모바일 친화적 UI 화면 구성
-    st.subheader("📊 핵심 지표 요약")
-    
-    # 화면을 두 칸으로 나누어 수치를 나란히 배치
+    # 2x2 형태로 깔끔하게 배치
     col1, col2 = st.columns(2)
     with col1:
-        st.metric(label="현재 종가", value=f"${current_price:.2f}")
+        st.metric(label="기간 내 최고가", value=f"{max_price:.2f}")
+        st.metric(label="현재가", value=f"{current_price:.2f}")
     with col2:
-        # MDD는 직관적으로 볼 수 있게 표시
-        st.metric(label="25년 이후 MDD", value=f"{mdd:.2f}%")
+        st.metric(label="최고가 기록일", value=max_date)
+        # 하락률은 색상으로 직관적으로 표시되도록 metric 기능 활용
+        st.metric(label="최고가 대비 증감률", value=f"{drawdown:.2f}%")
         
-    # 5. 시각화 차트 추가
-    st.subheader("📈 25년 이후 주가 흐름")
+    st.subheader("📈 최근 5년 주가 흐름")
     st.line_chart(df['Close'])
     
-    st.subheader("📉 하락폭(Drawdown) 추이")
-    # 하락률만 따로 모아 차트로 보여주어 위험도를 시각화
-    st.line_chart(df['Drawdown'])
-    
 else:
-    # 데이터를 못 불러왔을 때의 에러 메시지
-    st.error("데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.")
+    st.error("데이터를 찾을 수 없습니다. 티커를 다시 확인해주세요. (한국 주식은 코스피 .KS, 코스닥 .KQ를 붙여야 합니다)")
